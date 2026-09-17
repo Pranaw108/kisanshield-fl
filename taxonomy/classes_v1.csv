@@ -1,0 +1,23 @@
+class_id,crop,name_en,name_hi,visible_on_leaf,in_model,status
+SOY_HEALTHY,soybean,Healthy,स्वस्थ,true,true,draft
+SOY_YMV,soybean,Yellow mosaic virus,पीला मोज़ेक रोग,true,true,draft
+SOY_RUST,soybean,Rust,गेरुआ रोग,true,true,draft
+SOY_FROGEYE,soybean,Frogeye leaf spot,फ्रॉगआई पत्ती धब्बा,true,true,draft
+SOY_AERIAL_BLIGHT,soybean,Rhizoctonia aerial blight,राइज़ोक्टोनिया एरियल ब्लाइट,true,true,draft
+SOY_ANTHRACNOSE,soybean,Anthracnose,एन्थ्रेक्नोज़,true,true,draft
+SOY_BACT_PUSTULE,soybean,Bacterial pustule,जीवाणु फफोला रोग,true,true,draft
+SOY_CHARCOAL_ROT,soybean,Charcoal rot,चारकोल सड़न,false,false,draft
+WHT_HEALTHY,wheat,Healthy,स्वस्थ,true,true,draft
+WHT_BROWN_RUST,wheat,Brown (leaf) rust,भूरा रतुआ,true,true,draft
+WHT_YELLOW_RUST,wheat,Yellow (stripe) rust,पीला रतुआ,true,true,draft
+WHT_BLACK_RUST,wheat,Black (stem) rust,काला रतुआ,true,true,draft
+WHT_SPOT_BLOTCH,wheat,Spot blotch / leaf blight,पत्ती झुलसा,true,true,draft
+WHT_POWDERY_MILDEW,wheat,Powdery mildew,चूर्णिल आसिता,true,true,draft
+WHT_KARNAL_BUNT,wheat,Karnal bunt,करनाल बंट,false,false,draft
+PUL_HEALTHY,pulses,Healthy,स्वस्थ,true,true,draft
+PUL_URD_MOONG_YMV,pulses,Urd/moong yellow mosaic virus,उड़द/मूंग पीला मोज़ेक,true,true,draft
+PUL_CERCOSPORA,pulses,Cercospora leaf spot,सरकोस्पोरा पत्ती धब्बा,true,true,draft
+PUL_POWDERY_MILDEW,pulses,Powdery mildew,चूर्णिल आसिता,true,true,draft
+PUL_CHICKPEA_ASCOCHYTA,pulses,Chickpea Ascochyta blight,चना एस्कोकाइटा ब्लाइट,true,true,draft
+PUL_CHICKPEA_WILT,pulses,Chickpea wilt,चना उकठा रोग,false,false,draft
+UNKNOWN,all,Unknown / not a leaf,अज्ञात / पत्ती नहीं,true,true,draft

@@ -15,6 +15,10 @@ data/interim/
 saved_models/
 mlruns/
 mlartifacts/
+# manifests: only the full-run summary report is committed
+data/manifests/*.csv
+data/manifests/*_list_only.md
+data/manifests/*_partial.md
 # allow images used in docs
 !docs/**/*.png
 !docs/**/*.jpg
@@ -28,6 +32,8 @@ mlartifacts/
 *.jks
 *.keystore
 google-services.json
+kaggle.json
+access_token
 keystore.properties
 
 # ---- Python ----

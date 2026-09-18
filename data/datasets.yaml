@@ -1,0 +1,289 @@
+# KisanShield-FL — dataset registry
+#
+# The public datasets this project uses. Only datasets listed here may enter training or evaluation.
+# This file is also the configuration for data/scripts/build_manifest.py.
+#
+# class_map: normalised source label -> taxonomy class_id (taxonomy/classes_v1.csv)
+#   <CLASS_ID> = use the image for that class
+#   null       = hold: not in taxonomy v1 yet (decision pending in roadmap S-02)
+#   review     = hold: agronomist must decide
+#   drop       = exclude from the model (pest, not a disease, not relevant)
+#   Label normalisation: lower-case, non-alphanumerics -> "_", then label_strip_suffixes removed.
+#   e.g. "Black Rust" -> black_rust, "blast_test_valid" -> blast, "1(HR)" -> 1_hr
+#
+# local.archives: how to read each downloaded archive (paths are relative to --data-root).
+#   rules are regexes searched against the member path; the FIRST match wins.
+#     (?P<label>...) / (?P<split>...)  capture the source label / the dataset's own split
+#     label: <text>                    fixed label for every match
+#     exclude: <reason>                keep a manifest row but never use or hash it
+#     skip: <reason>                   do not read at all (no row); used for whole nested zips and archive copies
+#   Nested zips are opened automatically; their files are matched as "<outer path>!/<inner path>".
+
+schema_version: 2
+last_reviewed: 2026-09-18
+
+datasets:
+
+  # ======================================================================
+  # WHEAT
+  # ======================================================================
+
+  - id: kaggle_wheat_plant_diseases
+    name: "Wheat Plant Diseases"
+    crop: wheat
+    url: https://www.kaggle.com/datasets/kushagra3204/wheat-plant-diseases
+    kaggle_ref: kushagra3204/wheat-plant-diseases
+    doi: null
+    licence: CC0-1.0
+    licence_status: declared-by-uploader-sources-unknown
+    citation: >-
+      kushagra3204. Wheat Plant Diseases [Data set]. Kaggle.
+      https://www.kaggle.com/datasets/kushagra3204/wheat-plant-diseases
+    origin: unknown
+    capture: unknown (likely aggregated from several sources)
+    images_total: 14154 (PNG; ships its own train/valid/test split)
+    local:
+      label_strip_suffixes: [_valid, _test]
+      archives:
+        - file: "wheat data.zip"
+          downloaded: 2026-09-15
+          rules:
+            - pattern: '^(?P<split>train|valid|test)/(?P<label>[^/]+)/[^/]+$'
+    class_map:
+      healthy: WHT_HEALTHY
+      brown_rust: WHT_BROWN_RUST
+      yellow_rust: WHT_YELLOW_RUST
+      black_rust: WHT_BLACK_RUST
+      leaf_blight: WHT_SPOT_BLOTCH     # agronomist to confirm Helminthosporium leaf blight = spot blotch complex
+      mildew: WHT_POWDERY_MILDEW
+      septoria: null
+      tan_spot: null
+      smut: drop                       # ear/grain stage, not leaf
+      common_root_rot: drop            # not visible on leaf
+      fusarium_head_blight: drop       # ear stage
+      blast: drop                      # not reported in India; would cause false alarms
+      aphid: drop
+      mite: drop
+      stem_fly: drop
+    notes:
+      - Uploader declares CC0 but does not say where images came from. Duplicate and watermark checks are mandatory.
+      - Its own train/valid/test split is recorded (split_source) but NOT used. We re-split by source group.
+
+  - id: yellow_rust_19
+    name: "YELLOW-RUST-19: Yellow Rust Disease in Wheat"
+    crop: wheat
+    url: https://www.kaggle.com/datasets/tolgahayit/yellowrust19-yellow-rust-disease-in-wheat
+    kaggle_ref: tolgahayit/yellowrust19-yellow-rust-disease-in-wheat
+    doi: null
+    licence: TODO   # read the "License" field on the Kaggle page and record it here
+    licence_status: to-verify
+    citation: >-
+      Hayıt, T., Erbay, H., Varçın, F., Hayıt, F., & Akci, N. (2023). The classification of wheat
+      yellow rust disease based on a combination of textural and deep features.
+      Multimedia Tools and Applications. https://doi.org/10.1007/s11042-023-15199-y
+    paper: https://pmc.ncbi.nlm.nih.gov/articles/PMC10173929/
+    origin: {country: Türkiye, site: Field Crops Central Research Institute, Haymana-Ankara}
+    capture: field-grown leaves (sown Oct-Nov 2018), expert-scored severity (modified Cobb scale)
+    images_total: 5421 raw + 15000 pre-processed/augmented (224x224, 2,500 per class)
+    local:
+      archives:
+        - file: "Yellow Rust Disease in Wheat (Raw).zip"
+          downloaded: 2026-09-18
+          rules:
+            - pattern: '^RAW/(?P<label>[^/]+)/[^/]+$'
+        - file: "Yellow Rust Disease in Wheat(YELLOW-RUST-19).zip"
+          downloaded: 2026-09-18
+          rules:
+            - pattern: '^YELLOW-RUST-19/'
+              exclude: augmented_copy_of_raw
+    class_map:
+      "0": WHT_HEALTHY
+      r: WHT_YELLOW_RUST
+      mr: WHT_YELLOW_RUST
+      mrms: WHT_YELLOW_RUST
+      ms: WHT_YELLOW_RUST
+      s: WHT_YELLOW_RUST
+    severity_map:     # onto the 0-4 severity scale (taxonomy/README); agronomist to confirm
+      "0": 0
+      r: 1
+      mr: 1
+      mrms: 2
+      ms: 3
+      s: 4
+    notes:
+      - Classes are severity levels of ONE disease, collapsed to WHT_YELLOW_RUST. Severity is kept as a separate label.
+      - Only RAW images are used. YELLOW-RUST-19 is the same leaves, pre-processed and augmented.
+
+  # ======================================================================
+  # SOYBEAN
+  # ======================================================================
+
+  - id: mh_soyahealthvision
+    name: "MH-SoyaHealthVision: An Indian UAV and leaf image dataset for integrated crop health assessment of soybean crop"
+    crop: soybean
+    url: https://data.mendeley.com/datasets/hkbgh5s3b7/1
+    doi: 10.17632/hkbgh5s3b7.1
+    version: 1
+    licence: CC-BY-NC-4.0
+    licence_status: confirmed-noncommercial
+    citation: >-
+      Shinde, S., & Attar, V. (2025). MH-SoyaHealthVision: An Indian UAV and leaf image dataset
+      for integrated crop health assessment of soybean crop (Version 1) [Data set].
+      Mendeley Data. https://doi.org/10.17632/hkbgh5s3b7.1
+    paper: https://pmc.ncbi.nlm.nih.gov/articles/PMC12175242/
+    origin: {country: India, state: Maharashtra, districts: [Sangli, Satara]}
+    capture: field (smartphones); UAV subset not used
+    seasons: [kharif 2023, kharif 2024]
+    devices: [iPhone 14 Plus, Galaxy F34 5G, OPPO A31]
+    local:
+      archives:
+        - file: "MH-SoyaHealthVision An Indian UAV and Leaf Image Dataset for Integrated Crop Health Assessment.zip"
+          downloaded: 2026-09-18
+          rules:
+            - pattern: 'Soyabean_UAV-Based_Image_Dataset/'
+              skip: uav_images_not_used
+            - pattern: 'Soyabean_Leaf_Image_Dataset/(?P<label>[^/]+)\.zip!/'
+    class_map:
+      healthy_soyabean: SOY_HEALTHY
+      soyabean_mosaic: SOY_YMV                # agronomist to confirm "mosaic" = yellow mosaic virus
+      soyabean_rust: SOY_RUST
+      soyabean_frog_leaf_eye: SOY_FROGEYE
+      soyabean_spectoria_brown_spot: null     # S-02: candidate new class (Septoria brown spot)
+      caterpillar_and_semilooper_pest_attack: drop
+    notes:
+      - NON-COMMERCIAL licence. Fine for the funded research. Retrain without it if the app is ever commercialised.
+      - Leaf images ship as nested zips (one per class).
+
+  - id: soynet
+    name: "SoyNet: Indian Soybean Image dataset with quality images captured from the agriculture field"
+    crop: soybean
+    url: https://data.mendeley.com/datasets/w2r855hpx8/2
+    doi: 10.17632/w2r855hpx8.2
+    version: 2
+    licence: CC-BY-4.0
+    licence_status: confirmed
+    citation: >-
+      Rajput, A. S., Shukla, S., & Thakur, S. S. (2023). SoyNet: Indian Soybean Image dataset
+      with quality images captured from the agriculture field (healthy and disease images)
+      (Version 2) [Data set]. Mendeley Data. https://doi.org/10.17632/w2r855hpx8.2
+    paper: https://pmc.ncbi.nlm.nih.gov/articles/PMC10415694/
+    origin: {country: India, state: Madhya Pradesh, district: Jabalpur}
+    capture: field
+    season: kharif (Oct-Nov)
+    devices: [Nikon L810, Motorola G40]
+    local:
+      archives:
+        - file: "SoyNet Indian Soybean Image dataset with quality images captured from the agriculture field ( healthy and disease Images).zip"
+          downloaded: 2026-09-17
+          rules:
+            - pattern: '\.rar$'
+              skip: duplicate_archive_copy
+            - pattern: '/Preprocessing_SoyNet_Data/'
+              exclude: derived_copy_resized_or_grayscale
+            - pattern: '/Raw_SoyNet_Data/Camera Clicks/(?P<label>[^/]+)/[^/]+$'
+            - pattern: '/Raw_SoyNet_Data/Mobile Click/[^/]+$'
+              label: mobile_disease
+    class_map:
+      healthy_pic: SOY_HEALTHY
+      disease_pic: null       # mixes 7 diseases; needs expert re-labelling (S-05)
+      mobile_disease: null    # all diseased per the paper; needs expert re-labelling
+    notes:
+      - The only dataset photographed in Madhya Pradesh. Highest priority for expert re-labelling.
+      - Only raw colour photos are used. Resized and grayscale folders are copies, and the bundled SoyNet.rar is a second copy of the archive.
+
+  # ======================================================================
+  # PEA (Pisum sativum)
+  # ======================================================================
+
+  - id: pea_pisum_sativum
+    name: "Pisum sativum Image Dataset: Healthy and Disease-Affected Cases"
+    crop: pea
+    url: https://data.mendeley.com/datasets/nnv3k3m94k/1
+    doi: 10.17632/nnv3k3m94k.1
+    version: 1
+    licence: CC-BY-4.0
+    licence_status: confirmed
+    citation: >-
+      Thite, S., & Patil, K. (2025). Pisum sativum Image Dataset: Healthy and Disease-Affected
+      Cases (Version 1) [Data set]. Mendeley Data. https://doi.org/10.17632/nnv3k3m94k.1
+    origin: {country: India, state: not stated}
+    capture: field
+    local:
+      archives:
+        - file: "Pisum sativum Image Dataset Healthy and Disease-Af.zip"
+          downloaded: 2026-09-15
+          rules:
+            - pattern: '^[^/]+/(?P<label>[^/]+)/[^/]+$'
+    class_map:     # pea is not in taxonomy v1; classes to be added in taxonomy v2 (S-02)
+      healthy_pea: null
+      ascochyta_blight: null     # pea pathogen; never merge with chickpea Ascochyta blight
+      botrytis_blight: null
+      anthracnose: null
+      powdery_mildew: null
+      downey_mildew: null
+      fusarium_wilt: null
+      pea_leaf_roll_virus: drop  # 40 images, too few
+      stem_rot: drop             # 41 images, too few; not a leaf symptom
+      pod_borer_damage: drop     # pest damage on pods
+
+  # ======================================================================
+  # CHICKPEA
+  # ======================================================================
+
+  - id: chickpea_fusarium_22
+    name: "FUSARIUM-22: Fusarium Wilt Disease in Chickpea Dataset"
+    crop: chickpea
+    url: https://www.kaggle.com/datasets/tolgahayit/fusarium-wilt-disease-in-chickpea-dataset
+    kaggle_ref: tolgahayit/fusarium-wilt-disease-in-chickpea-dataset
+    doi: null
+    licence: TODO   # read the "License" field on the Kaggle page and record it here
+    licence_status: to-verify
+    citation: >-
+      Hayit, T., Endes, A., & Hayit, F. (2023). The severity level classification of Fusarium wilt
+      of chickpea by pre-trained deep learning models. Journal of Plant Pathology.
+      https://doi.org/10.1007/s42161-023-01520-z ;
+      Hayit, T., Endes, A., & Hayit, F. (2023). KNN-based approach for the classification of fusarium
+      wilt disease in chickpea based on color and texture features. European Journal of Plant Pathology.
+      https://doi.org/10.1007/s10658-023-02791-z
+    origin: {country: Türkiye}
+    capture: expert-scored leaf images (per bundled readme)
+    images_total: 4339 raw + 15000 augmented
+    local:
+      archives:
+        - file: "FUSARIUM-22.zip"
+          downloaded: 2026-09-18
+          rules:
+            - pattern: '^dataset_augmented/'
+              exclude: augmented_copy_of_raw
+            - pattern: '^dataset_raw/(?P<label>[^/]+)/[^/]+$'
+    class_map:      # severity scale, % of plant wilted
+      1_hr: review            # highly resistant, 0-10% wilt: healthy or mild wilt? agronomist decides
+      3_r: PUL_CHICKPEA_WILT
+      5_mr: PUL_CHICKPEA_WILT
+      7_s: PUL_CHICKPEA_WILT
+      9_hs: PUL_CHICKPEA_WILT
+    severity_map:   # agronomist to confirm
+      3_r: 1
+      5_mr: 2
+      7_s: 3
+      9_hs: 4
+    notes:
+      - Taxonomy v1 marks PUL_CHICKPEA_WILT as advice-only (in_model=false). Using this dataset needs an S-02 decision to move it into the model.
+
+# ============================================================================
+# COVERAGE (drives field collection priorities, roadmap S-04)
+# ============================================================================
+coverage_gaps:
+  soybean:
+    covered: [SOY_HEALTHY, SOY_YMV, SOY_RUST, SOY_FROGEYE]
+    no_public_data: [SOY_AERIAL_BLIGHT, SOY_ANTHRACNOSE, SOY_BACT_PUSTULE]
+  wheat:
+    covered: [WHT_HEALTHY, WHT_BROWN_RUST, WHT_YELLOW_RUST, WHT_BLACK_RUST, WHT_SPOT_BLOTCH, WHT_POWDERY_MILDEW]
+    note: no Indian wheat images; MP field photos needed for the test set
+  pea:
+    covered: [pending taxonomy v2]
+  chickpea:
+    covered: [PUL_CHICKPEA_WILT (if moved into the model)]
+    no_public_data: [PUL_CHICKPEA_ASCOCHYTA]
+  urd_moong:
+    no_public_data: [PUL_URD_MOONG_YMV, PUL_CERCOSPORA, PUL_POWDERY_MILDEW]

@@ -36,9 +36,40 @@ The model gets better over time through **federated learning**: phones improve t
 |---|---|
 | Soybean | Yellow mosaic virus, rust, frogeye leaf spot, aerial blight, anthracnose |
 | Wheat | Brown rust, yellow rust, black rust, spot blotch, powdery mildew |
-| Pulses | Urd/moong YMV, Cercospora leaf spot, powdery mildew, chickpea Ascochyta blight |
+| Pulses | Chickpea Fusarium wilt, pea diseases (Ascochyta blight, powdery mildew, and others), urd/moong YMV |
 
 The full draft class list is in [taxonomy/classes_v1.csv](taxonomy/classes_v1.csv).
+
+## Datasets
+
+This project uses the following public datasets. **No images are redistributed in this repository.** Download each dataset from its source and follow its licence.
+
+| Crop | Dataset | Source | Images | Origin | Licence |
+|---|---|---|---|---|---|
+| Wheat | [Wheat Plant Diseases](https://www.kaggle.com/datasets/kushagra3204/wheat-plant-diseases) | Kaggle | ~14,155 | Not stated | CC0 (declared by uploader) |
+| Wheat | [YELLOW-RUST-19](https://www.kaggle.com/datasets/tolgahayit/yellowrust19-yellow-rust-disease-in-wheat) | Kaggle | 5,421 raw (6 severity levels) | Ankara, Türkiye | See Kaggle page |
+| Soybean | [MH-SoyaHealthVision](https://data.mendeley.com/datasets/hkbgh5s3b7/1) | Mendeley Data | 2,782 leaf images | Maharashtra, India | CC BY-NC 4.0 |
+| Soybean | [SoyNet](https://data.mendeley.com/datasets/w2r855hpx8/2) | Mendeley Data | 1,363 raw | Jabalpur, Madhya Pradesh | CC BY 4.0 |
+| Pea | [Pisum sativum Image Dataset](https://data.mendeley.com/datasets/nnv3k3m94k/1) | Mendeley Data | 12,066 | India | CC BY 4.0 |
+| Chickpea | [FUSARIUM-22: Fusarium Wilt Disease in Chickpea](https://www.kaggle.com/datasets/tolgahayit/fusarium-wilt-disease-in-chickpea-dataset) | Kaggle | 4,339 raw (5 severity levels) | Türkiye | See Kaggle page |
+
+Counts are the original images actually found in the downloads. Augmented and resized copies shipped with some datasets are excluded. See [data/manifests/summary_public_v1.md](data/manifests/summary_public_v1.md).
+
+Class mappings, usage rules (for example, which folders are excluded as duplicates) and licence status for each dataset are recorded in [data/datasets.yaml](data/datasets.yaml).
+
+> **Licence note:** MH-SoyaHealthVision is licensed for **non-commercial** use only. It is used here for research. Any commercial version of the model must be retrained without it.
+
+### Citations
+
+If you use this work, please also cite the original datasets:
+
+- kushagra3204. *Wheat Plant Diseases* [Data set]. Kaggle. https://www.kaggle.com/datasets/kushagra3204/wheat-plant-diseases
+- Hayıt, T., Erbay, H., Varçın, F., Hayıt, F., & Akci, N. (2023). The classification of wheat yellow rust disease based on a combination of textural and deep features. *Multimedia Tools and Applications*. https://doi.org/10.1007/s11042-023-15199-y
+- Shinde, S., & Attar, V. (2025). *MH-SoyaHealthVision: An Indian UAV and leaf image dataset for integrated crop health assessment of soybean crop* (Version 1) [Data set]. Mendeley Data. https://doi.org/10.17632/hkbgh5s3b7.1
+- Rajput, A. S., Shukla, S., & Thakur, S. S. (2023). *SoyNet: Indian Soybean Image dataset with quality images captured from the agriculture field* (Version 2) [Data set]. Mendeley Data. https://doi.org/10.17632/w2r855hpx8.2
+- Thite, S., & Patil, K. (2025). *Pisum sativum Image Dataset: Healthy and Disease-Affected Cases* (Version 1) [Data set]. Mendeley Data. https://doi.org/10.17632/nnv3k3m94k.1
+- Hayit, T., Endes, A., & Hayit, F. (2023). The severity level classification of Fusarium wilt of chickpea by pre-trained deep learning models. *Journal of Plant Pathology*. https://doi.org/10.1007/s42161-023-01520-z
+- Hayit, T., Endes, A., & Hayit, F. (2023). KNN-based approach for the classification of fusarium wilt disease in chickpea based on color and texture features. *European Journal of Plant Pathology*. https://doi.org/10.1007/s10658-023-02791-z
 
 ## Tech stack
 

@@ -1,0 +1,8 @@
+test,scope,macro_f1,note
+class from metadata only,soybean,0.52,majority-class share 0.41
+class from embedding (linear probe),soybean,0.762,
+class from metadata only,wheat,0.851,majority-class share 0.60
+class from embedding (linear probe),wheat,0.821,
+source dataset from embedding,SOY_HEALTHY,1.0,"mh_soyahealthvision 204, soynet 124"
+source dataset from embedding,WHT_HEALTHY,1.0,"kaggle_wheat_plant_diseases 986, yellow_rust_19 202"
+source dataset from embedding,WHT_YELLOW_RUST,1.0,"yellow_rust_19 5173, kaggle_wheat_plant_diseases 896"

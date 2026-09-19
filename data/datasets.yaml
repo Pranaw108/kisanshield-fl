@@ -42,6 +42,8 @@ datasets:
     origin: unknown
     capture: unknown (likely aggregated from several sources)
     images_total: 14154 (PNG; ships its own train/valid/test split)
+    quality:
+      min_short_side: 96   # D-07: tiny crops cannot show lesions
     local:
       label_strip_suffixes: [_valid, _test]
       archives:
@@ -207,7 +209,9 @@ datasets:
       Thite, S., & Patil, K. (2025). Pisum sativum Image Dataset: Healthy and Disease-Affected
       Cases (Version 1) [Data set]. Mendeley Data. https://doi.org/10.17632/nnv3k3m94k.1
     origin: {country: India, state: not stated}
-    capture: field
+    capture: mostly pods photographed on white paper (seen in EDA), some whole plants
+    quality:
+      min_sharpness: 8     # D-07: heavy motion blur below this
     local:
       archives:
         - file: "Pisum sativum Image Dataset Healthy and Disease-Af.zip"
@@ -245,7 +249,7 @@ datasets:
       Hayit, T., Endes, A., & Hayit, F. (2023). KNN-based approach for the classification of fusarium
       wilt disease in chickpea based on color and texture features. European Journal of Plant Pathology.
       https://doi.org/10.1007/s10658-023-02791-z
-    origin: {country: Türkiye}
+    origin: {country: Türkiye, site: Yozgat Bozok University research field, sown Feb-Mar 2022}
     capture: expert-scored leaf images (per bundled readme)
     images_total: 4339 raw + 15000 augmented
     local:
@@ -257,18 +261,19 @@ datasets:
               exclude: augmented_copy_of_raw
             - pattern: '^dataset_raw/(?P<label>[^/]+)/[^/]+$'
     class_map:      # severity scale, % of plant wilted
-      1_hr: review            # highly resistant, 0-10% wilt: healthy or mild wilt? agronomist decides
+      1_hr: PUL_HEALTHY       # D-01: dataset authors describe 1 (HR) as the healthy category
       3_r: PUL_CHICKPEA_WILT
       5_mr: PUL_CHICKPEA_WILT
       7_s: PUL_CHICKPEA_WILT
       9_hs: PUL_CHICKPEA_WILT
     severity_map:   # agronomist to confirm
+      1_hr: 0
       3_r: 1
       5_mr: 2
       7_s: 3
       9_hs: 4
     notes:
-      - Taxonomy v1 marks PUL_CHICKPEA_WILT as advice-only (in_model=false). Using this dataset needs an S-02 decision to move it into the model.
+      - D-02 moved PUL_CHICKPEA_WILT into the model (taxonomy in_model=true); the bundled readme describes these as leaf images.
 
 # ============================================================================
 # COVERAGE (drives field collection priorities, roadmap S-04)

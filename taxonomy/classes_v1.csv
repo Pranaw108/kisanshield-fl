@@ -19,5 +19,5 @@ PUL_URD_MOONG_YMV,pulses,Urd/moong yellow mosaic virus,उड़द/मूंग
 PUL_CERCOSPORA,pulses,Cercospora leaf spot,सरकोस्पोरा पत्ती धब्बा,true,true,draft
 PUL_POWDERY_MILDEW,pulses,Powdery mildew,चूर्णिल आसिता,true,true,draft
 PUL_CHICKPEA_ASCOCHYTA,pulses,Chickpea Ascochyta blight,चना एस्कोकाइटा ब्लाइट,true,true,draft
-PUL_CHICKPEA_WILT,pulses,Chickpea wilt,चना उकठा रोग,false,false,draft
+PUL_CHICKPEA_WILT,pulses,Chickpea wilt,चना उकठा रोग,true,true,draft
 UNKNOWN,all,Unknown / not a leaf,अज्ञात / पत्ती नहीं,true,true,draft

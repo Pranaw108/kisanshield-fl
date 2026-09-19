@@ -3,10 +3,13 @@
 Scans the downloaded dataset archives listed in data/datasets.yaml, labels every image
 using the taxonomy mapping, hashes it, finds exact and near-duplicate images, and writes:
 
-    <out>/manifest_public_v1.csv    one row per image (use / hold / exclude, with reason)
-    <out>/duplicates_public_v1.csv  every duplicate group, with the kept (canonical) image
-    <out>/hash_cache.csv            cached hashes, so re-runs only hash new or changed files
-    <out>/summary_public_v1.md      human-readable report (also copied to data/manifests/)
+    <out>/manifest_<version>.csv    one row per image (use / hold / exclude, with reason)
+    <out>/duplicates_<version>.csv  every duplicate group, with the kept (canonical) image
+    <out>/hash_cache.csv            cached hashes, reused for unchanged archive members (same path, CRC, size)
+    <out>/summary_<version>.md      human-readable report (also copied to data/manifests/)
+
+Review decisions are applied from data/datasets.yaml (class_map, quality) and
+data/review/image_overrides.csv (per-image). See data/review/DECISIONS.md.
 
 Images are read directly from the zip archives (including nested zips), so nothing is extracted
 and no extra disk space is needed.
@@ -40,11 +43,12 @@ import numpy as np
 import yaml
 from PIL import Image, ImageOps
 
-MANIFEST_VERSION = "public_v1"
+MANIFEST_VERSION = "public_v2"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "data" / "datasets.yaml"
 DEFAULT_TAXONOMY = REPO_ROOT / "taxonomy" / "classes_v1.csv"
 REPO_SUMMARY_DIR = REPO_ROOT / "data" / "manifests"
+DEFAULT_OVERRIDES = REPO_ROOT / "data" / "review" / "image_overrides.csv"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 NESTED_SEP = "!/"
@@ -55,9 +59,12 @@ MANIFEST_FIELDS = [
     "image_id", "dataset_id", "crop", "archive", "member_path", "split_source",
     "source_label", "class_id", "severity", "status", "reason", "duplicate_of", "dup_group",
     "sha256", "phash", "width", "height", "mode", "is_grayscale", "file_bytes",
-    "sharpness_256", "brightness",
+    "sharpness_256", "brightness", "error_detail",
 ]
 HASH_FIELDS = ["sha256", "phash", "width", "height", "mode", "is_grayscale", "sharpness_256", "brightness", "error"]
+# bump when hash_image() changes, so cached results from the old code are not reused
+HASH_VERSION = "1"
+CACHE_FIELDS = ["key", "hash_version", *HASH_FIELDS]
 
 log = logging.getLogger("build_manifest")
 
@@ -90,6 +97,8 @@ class DatasetSpec:
     strip_suffixes: list[str]
     archives: list[ArchiveSpec]
     priority: int = 0
+    min_short_side: int = 0     # pixels; smaller images are excluded as too_small
+    min_sharpness: float = 0.0  # sharpness_256; lower is excluded as too_blurry
 
 
 def normalise_label(raw: str, strip_suffixes: list[str] | tuple[str, ...] = ()) -> str:
@@ -134,7 +143,9 @@ def load_config(path: Path, taxonomy_ids: set[str]) -> list[DatasetSpec]:
                 except re.error as exc:
                     errors.append(f"{ds['id']}: bad regex {r.get('pattern')!r}: {exc}")
             archives.append(ArchiveSpec(arc["file"], rules, str(arc.get("downloaded") or "") or None))
-        specs.append(DatasetSpec(ds["id"], ds["crop"], class_map, severity, strip, archives, priority))
+        quality = ds.get("quality") or {}
+        specs.append(DatasetSpec(ds["id"], ds["crop"], class_map, severity, strip, archives, priority,
+                                 int(quality.get("min_short_side", 0)), float(quality.get("min_sharpness", 0))))
     if errors:
         raise ValueError("Invalid datasets.yaml:\n  - " + "\n  - ".join(errors))
     return specs
@@ -205,11 +216,16 @@ def _iter_nested(outer: zipfile.ZipFile, info: zipfile.ZipInfo, rules: list[Rule
                 stats.non_image[ext or "<none>"] += 1
 
 
+def make_image_id(dataset_id: str, archive: str, member_path: str) -> str:
+    """Stable id from where the image lives, so it survives re-runs."""
+    return hashlib.sha1(f"{dataset_id}|{archive}|{member_path}".encode()).hexdigest()[:16]
+
+
 def classify(ds: DatasetSpec, archive: str, member: Member, rules: list[Rule], stats: ScanStats) -> dict:
     """Decide label, class and initial status for one image (no image decoding here)."""
     row = {k: "" for k in MANIFEST_FIELDS}
     row.update(
-        image_id=hashlib.sha1(f"{ds.id}|{archive}|{member.path}".encode()).hexdigest()[:16],
+        image_id=make_image_id(ds.id, archive, member.path),
         dataset_id=ds.id, crop=ds.crop, archive=archive, member_path=member.path, file_bytes=member.size,
     )
     hit = match_rule(rules, member.path)
@@ -261,6 +277,7 @@ def hash_image(data: bytes) -> dict:
             if img.format == "JPEG":
                 img.draft("RGB", (512, 512))  # decode at reduced scale: much faster for 12-64 MP photos
             rgb = ImageOps.exif_transpose(img).convert("RGB")
+        # heuristic: near-identical colour channels = likely grayscale (a very pale photo can also match)
         small = np.asarray(rgb.resize((64, 64)), dtype=np.int16)
         channel_spread = np.abs(small[..., 0] - small[..., 1]).mean() + np.abs(small[..., 1] - small[..., 2]).mean()
         gray = np.asarray(rgb.convert("L").resize((256, 256)), dtype=np.float32)
@@ -282,10 +299,19 @@ def cache_key(archive: str, member: Member) -> str:
 
 
 def load_cache(path: Path) -> dict[str, dict]:
+    """Cached hash results for the current HASH_VERSION only."""
     if not path.exists():
         return {}
     with path.open(encoding="utf-8", newline="") as fh:
-        return {r["key"]: r for r in csv.DictReader(fh)}
+        rows = list(csv.DictReader(fh))
+    if rows and "hash_version" not in rows[0]:  # cache written before versioning: those rows are version 1
+        for r in rows:
+            r["hash_version"] = "1"
+        with path.open("w", encoding="utf-8", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=CACHE_FIELDS, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+    return {r["key"]: r for r in rows if r["hash_version"] == HASH_VERSION}
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +325,9 @@ def group_near_duplicates(phashes: list[str], threshold: int) -> list[list[int]]
     `threshold` of IT. Unlike single-linkage (union-find), this never chains A~B~C into one group
     when A and C are far apart: every member is within `threshold` of the image that is kept.
     Returns groups (lists of indices, leader first) with at least two members.
+
+    Cost is O(N^2) in the worst case: ~20 s for 33k images, ~100 s for 100k. Beyond that, switch to an
+    indexed Hamming search (e.g. multi-index hashing) to find candidates first.
     """
     values = np.array([int(h, 16) for h in phashes], dtype=np.uint64)
     unassigned = np.ones(len(values), dtype=bool)
@@ -317,16 +346,29 @@ def group_near_duplicates(phashes: list[str], threshold: int) -> list[list[int]]
     return groups
 
 
-def resolve_duplicates(rows: list[dict], threshold: int, priority: dict[str, int]) -> list[dict]:
-    """Group exact + near duplicates among hashed use/hold rows; keep one image per group.
+def is_reviewed(row: dict) -> bool:
+    return row["reason"].startswith(REVIEW_PREFIX)
 
-    Images are ranked by keep preference (use before hold, higher resolution, dataset order), so each
-    group's leader is the image kept. Exact duplicates have distance 0, so they are caught too.
+
+def label_identity(row: dict) -> str:
+    """What the image claims to show: its taxonomy class, or its source label while it has none."""
+    return row["class_id"] or f"{row['dataset_id']}:{row['source_label']}"
+
+
+def resolve_duplicates(rows: list[dict], threshold: int, priority: dict[str, int]) -> list[dict]:
+    """Group exact + near duplicates and keep one image per group. Runs after review overrides.
+
+    Keep preference: reviewed images first, then use before hold, higher resolution, dataset order.
+    - A group led by an expert-rejected image: all its copies are excluded too.
+    - Copies that disagree on the label (class, or source label for held images): all excluded (D-06),
+      unless an expert labelled one of them, in which case the expert label wins.
+    - Expert decisions on individual images are never changed here.
     Returns duplicate-report rows. Mutates manifest rows (status, reason, duplicate_of, dup_group).
     """
-    status_rank = {"use": 0, "hold": 1}
-    idx = [i for i, r in enumerate(rows) if r["status"] in ("use", "hold") and r["phash"]]
-    idx.sort(key=lambda i: (status_rank[rows[i]["status"]],
+    status_rank = {"use": 0, "hold": 1, "exclude": 2}
+    idx = [i for i, r in enumerate(rows) if r["phash"] and
+           (r["status"] in ("use", "hold") or (r["status"] == "exclude" and is_reviewed(r)))]
+    idx.sort(key=lambda i: (not is_reviewed(rows[i]), status_rank[rows[i]["status"]],
                             -(int(rows[i]["width"] or 0) * int(rows[i]["height"] or 0)),
                             priority[rows[i]["dataset_id"]], rows[i]["member_path"]))
 
@@ -334,28 +376,95 @@ def resolve_duplicates(rows: list[dict], threshold: int, priority: dict[str, int
     for group_no, members in enumerate(group_near_duplicates([rows[i]["phash"] for i in idx], threshold), 1):
         gid = f"D{group_no:05d}"
         member_rows = [rows[idx[k]] for k in members]
-        canonical = member_rows[0]
-        classes = {r["class_id"] for r in member_rows if r["class_id"]}
-        labels = {(r["dataset_id"], r["source_label"]) for r in member_rows}
-        conflict = len(classes) > 1
+        leader = member_rows[0]
+        rejected = is_reviewed(leader) and leader["status"] == "exclude"
+        expert_classes = {r["class_id"] for r in member_rows if is_reviewed(r) and r["status"] == "use"}
+        if rejected:
+            outcome = "copies_of_rejected"
+        elif len(expert_classes) > 1 or (not expert_classes and
+                                         len({label_identity(r) for r in member_rows}) > 1):
+            outcome = "label_conflict"
+        else:
+            outcome = "kept_one"
+
         for r in member_rows:
             r["dup_group"] = gid
-            if conflict:
-                r.update(status="hold", reason="duplicate_label_conflict")
-            elif r is not canonical:
-                kind = "exact_duplicate" if r["sha256"] == canonical["sha256"] else "near_duplicate"
-                r.update(status="exclude", reason=kind, duplicate_of=canonical["image_id"])
+            if outcome == "label_conflict" and not (is_reviewed(r) and len(expert_classes) < 2):
+                r.update(status="exclude", reason="duplicate_label_conflict")
+            elif is_reviewed(r) or r is leader:
+                continue
+            elif outcome == "copies_of_rejected":
+                r.update(status="exclude", reason="duplicate_of_rejected", duplicate_of=leader["image_id"])
+            else:
+                kind = "exact_duplicate" if r["sha256"] == leader["sha256"] else "near_duplicate"
+                r.update(status="exclude", reason=kind, duplicate_of=leader["image_id"])
         datasets = sorted({r["dataset_id"] for r in member_rows})
+        labels = {(r["dataset_id"], r["source_label"]) for r in member_rows}
         report.append({
-            "dup_group": gid, "size": len(member_rows), "label_conflict": int(conflict),
+            "dup_group": gid, "size": len(member_rows), "outcome": outcome,
+            "label_conflict": int(outcome == "label_conflict"),
             "datasets": " | ".join(datasets),
             "cross_dataset": int(len(datasets) > 1),
             "cross_split": int(len({r["split_source"] for r in member_rows if r["split_source"]}) > 1),
-            "canonical": canonical["image_id"],
+            "canonical": "" if outcome != "kept_one" else leader["image_id"],
             "members": " | ".join(f"{r['image_id']}:{r['dataset_id']}:{r['source_label']}" for r in member_rows),
             "labels": " | ".join(sorted(f"{d}:{l}" for d, l in labels)),
         })
     return report
+
+
+def apply_quality_rules(rows: list[dict], specs: dict[str, DatasetSpec]) -> None:
+    """Exclude images below each dataset's minimum size or sharpness (runs before duplicate checks)."""
+    for r in rows:
+        if r["status"] not in ("use", "hold") or r["width"] == "":
+            continue
+        ds = specs[r["dataset_id"]]
+        if min(int(r["width"]), int(r["height"])) < ds.min_short_side:
+            r.update(status="exclude", reason="too_small")
+        elif float(r["sharpness_256"]) < ds.min_sharpness:
+            r.update(status="exclude", reason="too_blurry")
+
+
+# ---------------------------------------------------------------------------
+# Review decisions (per-image overrides)
+# ---------------------------------------------------------------------------
+
+OVERRIDE_ACTIONS = {"exclude", "use", "hold"}
+REVIEW_PREFIX = "review:"
+
+
+def apply_overrides(rows: list[dict], path: Path, taxonomy_ids: set[str]) -> dict:
+    """Apply expert / cleaning decisions from a CSV, before duplicate checks.
+
+    Overrides win over automatic rules. Every reviewed row gets reason "review:<reason>" (use rows too),
+    so resolve_duplicates() can keep expert decisions and apply them to near-identical copies.
+    CSV columns: image_id, action (exclude|use|hold), class_id (needed for use), reason, decided_by, status
+    """
+    result = {"applied": 0, "unknown_ids": [], "by_reason": Counter()}
+    if not path or not path.exists():
+        return result
+    by_id = {r["image_id"]: r for r in rows}
+    with path.open(encoding="utf-8", newline="") as fh:
+        for line_no, o in enumerate(csv.DictReader(fh), start=2):
+            action = (o.get("action") or "").strip()
+            class_id = (o.get("class_id") or "").strip()
+            if action not in OVERRIDE_ACTIONS:
+                raise ValueError(f"{path.name}:{line_no}: action must be one of {sorted(OVERRIDE_ACTIONS)}")
+            if action == "use" and class_id not in taxonomy_ids:
+                raise ValueError(f"{path.name}:{line_no}: 'use' needs a valid taxonomy class_id, got {class_id!r}")
+            row = by_id.get(o["image_id"].strip())
+            if row is None:
+                result["unknown_ids"].append(o["image_id"])
+                continue
+            if action == "use" and not row["phash"]:
+                raise ValueError(f"{path.name}:{line_no}: image {row['image_id']} was never hashed "
+                                 f"({row['reason']}); change the archive rule instead of overriding it")
+            reason = f"{REVIEW_PREFIX}{(o.get('reason') or 'unspecified').strip()}"
+            row.update(status=action, reason=reason,
+                       class_id=class_id if action == "use" else ("" if action == "exclude" else row["class_id"]))
+            result["applied"] += 1
+            result["by_reason"][reason] += 1
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +530,7 @@ def _apply_hash(row: dict, h: dict) -> None:
         if k != "error":
             row[k] = h.get(k, "")
     if h.get("error"):
-        row.update(status="exclude", reason="unreadable_image")
+        row.update(status="exclude", reason="unreadable_image", error_detail=h["error"])
 
 
 def _drain(pending: dict, new_cache_rows: list[dict], keep: int) -> int:
@@ -433,7 +542,7 @@ def _drain(pending: dict, new_cache_rows: list[dict], keep: int) -> int:
             row, key = pending.pop(fut)
             h = fut.result()
             _apply_hash(row, h)
-            new_cache_rows.append({"key": key, **h})
+            new_cache_rows.append({"key": key, "hash_version": HASH_VERSION, **h})
             done_count += 1
     return done_count
 
@@ -441,7 +550,7 @@ def _drain(pending: dict, new_cache_rows: list[dict], keep: int) -> int:
 def _append_cache(path: Path, new_rows: list[dict]) -> None:
     exists = path.exists()
     with path.open("a", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=["key", *HASH_FIELDS])
+        writer = csv.DictWriter(fh, fieldnames=CACHE_FIELDS)
         if not exists:
             writer.writeheader()
         writer.writerows(new_rows)
@@ -454,7 +563,8 @@ def write_csv(path: Path, rows: list[dict], fields: list[str]) -> None:
         writer.writerows(rows)
 
 
-def build_summary(rows: list[dict], dups: list[dict], meta: dict, threshold: int | None, list_only: bool) -> str:
+def build_summary(rows: list[dict], dups: list[dict], meta: dict, threshold: int | None, list_only: bool,
+                  overrides: dict | None = None) -> str:
     L: list[str] = []
     L.append(f"# Public data manifest — {MANIFEST_VERSION}")
     L.append("")
@@ -532,8 +642,21 @@ def build_summary(rows: list[dict], dups: list[dict], meta: dict, threshold: int
                  + (" (" + ", ".join(f"{k}: {v}" for k, v in cross_ds.most_common()) + ")" if cross_ds else ""))
         L.append(f"- Groups spanning a dataset's own train/valid/test split (leakage in the source split): "
                  f"**{sum(g['cross_split'] for g in dups):,}**")
-        L.append(f"- Groups with conflicting labels (all members held for review): "
+        L.append(f"- Groups with conflicting labels, including held images (all members excluded): "
                  f"**{sum(g['label_conflict'] for g in dups):,}**")
+        L.append(f"- Groups that copy an expert-rejected image (copies excluded): "
+                 f"**{sum(g['outcome'] == 'copies_of_rejected' for g in dups):,}**")
+        L.append("")
+
+        L.append("## Review decisions applied (data/review/image_overrides.csv)")
+        L.append("")
+        if overrides and overrides["applied"]:
+            L.append("| Reason | Images |")
+            L.append("|---|---:|")
+            for why, n in overrides["by_reason"].most_common():
+                L.append(f"| {why} | {n:,} |")
+        else:
+            L.append("- None")
         L.append("")
 
         L.append("## Image quality flags (use + hold images)")
@@ -558,6 +681,9 @@ def build_summary(rows: list[dict], dups: list[dict], meta: dict, threshold: int
     unmapped = Counter((r["dataset_id"], r["source_label"]) for r in rows if r["reason"] == "label_not_in_class_map")
     for (d, lbl), n in unmapped.items():
         warnings.append(f"- {d}: label `{lbl}` ({n} images) is not in class_map. Add it to datasets.yaml.")
+    if overrides and overrides["unknown_ids"]:
+        warnings.append(f"- {len(overrides['unknown_ids'])} override rows point to unknown image ids "
+                        f"(e.g. `{overrides['unknown_ids'][0]}`)")
     unreadable = tot_reason(rows, "unreadable_image")
     if unreadable:
         warnings.append(f"- {unreadable} images could not be decoded (reason `unreadable_image`)")
@@ -579,6 +705,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--out", type=Path, help="Output folder (default: <data-root>/manifests)")
     p.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     p.add_argument("--taxonomy", type=Path, default=DEFAULT_TAXONOMY)
+    p.add_argument("--overrides", type=Path, default=DEFAULT_OVERRIDES,
+                   help="CSV of per-image review decisions (default: data/review/image_overrides.csv)")
     p.add_argument("--only", nargs="+", metavar="DATASET_ID", help="Process only these dataset ids")
     p.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     p.add_argument("--near-dup-threshold", type=int, default=4,
@@ -597,7 +725,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
     args = parse_args(argv)
-    specs = load_config(args.config, load_taxonomy(args.taxonomy))
+    taxonomy_ids = load_taxonomy(args.taxonomy)
+    specs = load_config(args.config, taxonomy_ids)
     if args.only:
         unknown = set(args.only) - {s.id for s in specs}
         if unknown:
@@ -611,16 +740,22 @@ def main(argv: list[str] | None = None) -> int:
     rows.sort(key=lambda r: (r["dataset_id"], r["archive"], r["member_path"]))
 
     dups: list[dict] = []
+    overrides: dict = {}
     if not args.list_only:
+        # order matters: automatic rules -> human decisions -> duplicates resolved on the final state
+        apply_quality_rules(rows, {s.id: s for s in specs})
+        overrides = apply_overrides(rows, args.overrides, taxonomy_ids)
+        if overrides["applied"]:
+            log.info("Applied %d review overrides from %s", overrides["applied"], args.overrides)
         log.info("Checking duplicates across %d images ...", sum(1 for r in rows if r["status"] in ("use", "hold")))
         dups = resolve_duplicates(rows, args.near_dup_threshold, {s.id: s.priority for s in specs})
         suffix = "" if not args.only else "_partial"
         write_csv(args.out / f"manifest_{MANIFEST_VERSION}{suffix}.csv", rows, MANIFEST_FIELDS)
         write_csv(args.out / f"duplicates_{MANIFEST_VERSION}{suffix}.csv", dups,
-                  ["dup_group", "size", "label_conflict", "datasets", "cross_dataset", "cross_split",
+                  ["dup_group", "size", "outcome", "label_conflict", "datasets", "cross_dataset", "cross_split",
                    "canonical", "labels", "members"])
 
-    summary = build_summary(rows, dups, meta, args.near_dup_threshold, args.list_only)
+    summary = build_summary(rows, dups, meta, args.near_dup_threshold, args.list_only, overrides)
     name = f"summary_{MANIFEST_VERSION}{'_list_only' if args.list_only else ''}{'_partial' if args.only else ''}.md"
     (args.out / name).write_text(summary, encoding="utf-8")
     REPO_SUMMARY_DIR.mkdir(parents=True, exist_ok=True)

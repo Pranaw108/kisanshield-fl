@@ -105,13 +105,30 @@ Each folder has its own README explaining what goes in it.
 3. No faces, names, phone numbers or exact GPS locations are stored.
 4. Public datasets are used only in line with their licences, and their sources are cited in `data/manifests/`.
 
+## Data status
+
+| Step | Status | Where |
+|---|---|---|
+| Dataset registry and manifest (duplicates, quality) | Done | [data/README.md](data/README.md) |
+| Exploratory data analysis | Done | [docs/eda/EDA_FINDINGS.md](docs/eda/EDA_FINDINGS.md) |
+| Cleaning decisions | Automatic rules applied; 7 decisions awaiting expert sign-off | [data/review/DECISIONS.md](data/review/DECISIONS.md) |
+| Expert label audit and SoyNet relabelling | Review pack ready | [data/review/README.md](data/review/README.md) |
+
+**Key EDA finding:** in the public data, class is strongly tied to the source dataset (image shape, background,
+camera). Accuracy on public data will overstate real-field accuracy. Madhya Pradesh field photos are needed for a trustworthy test set.
+
 ## Getting started
 
-Setup instructions will be added as each component lands. Planned prerequisites:
+Requirements: Python 3.11+ (tested on 3.13). Later components will also need Android Studio (JDK 17) and Docker.
 
-- Python 3.11+
-- Android Studio (latest stable), JDK 17
-- Docker and Docker Compose
+```bash
+python -m venv .venv
+.venv\Scripts\activate                 # Linux/macOS: source .venv/bin/activate
+pip install -r ml/requirements.txt
+python -m pytest data/scripts/tests -q
+```
+
+Then follow the data pipeline in [data/README.md](data/README.md).
 
 ## Contributing
 

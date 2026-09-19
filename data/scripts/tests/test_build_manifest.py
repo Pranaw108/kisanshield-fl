@@ -159,10 +159,106 @@ def test_group_near_duplicates_does_not_chain():
 # end-to-end
 # ---------------------------------------------------------------------------
 
-def run(fake_world, *extra):
+def run(fake_world, *extra, overrides=None):
     data, config, taxonomy, out = fake_world
     return bm.main(["--data-root", str(data), "--out", str(out), "--config", str(config),
-                    "--taxonomy", str(taxonomy), "--workers", "2", *extra])
+                    "--taxonomy", str(taxonomy), "--workers", "2",
+                    "--overrides", str(overrides or out / "no_overrides.csv"), *extra])
+
+
+def test_overrides_relabel_and_exclude(fake_world, monkeypatch, tmp_path):
+    monkeypatch.setattr(bm, "REPO_SUMMARY_DIR", tmp_path / "repo_summary")
+    assert run(fake_world) == 0
+    ids = {p: r["image_id"] for p, r in read_manifest(fake_world[3]).items()}
+
+    overrides = tmp_path / "overrides.csv"
+    overrides.write_text(
+        "image_id,action,class_id,reason,decided_by,status\n"
+        f"{ids['A/train/Mystery/4.jpg']},use,X_RUST,expert_relabel,agronomist,approved\n"
+        f"{ids['A/train/Healthy/1.jpg']},exclude,,blurry,engineer,provisional\n"
+        "ffffffffffffffff,exclude,,blurry,engineer,provisional\n", encoding="utf-8")
+    assert run(fake_world, overrides=overrides) == 0
+    m = read_manifest(fake_world[3])
+    assert m["A/train/Mystery/4.jpg"]["status"] == "use" and m["A/train/Mystery/4.jpg"]["class_id"] == "X_RUST"
+    assert m["A/train/Healthy/1.jpg"]["reason"] == "review:blurry"
+    # copies of the rejected image must not come back as the new "kept" image
+    for copy in ("A/train/Healthy/1_copy.jpg", "A/test/healthy_test/1_small.jpg"):
+        assert m[copy]["reason"] == "duplicate_of_rejected"
+        assert m[copy]["duplicate_of"] == ids["A/train/Healthy/1.jpg"]
+    summary = (tmp_path / "repo_summary" / f"summary_{bm.MANIFEST_VERSION}.md").read_text(encoding="utf-8")
+    assert "review:blurry" in summary and "unknown image ids" in summary
+
+
+def dup_row(image_id, status, class_id="", source_label="lbl", reason="", phash="0000000000000000", ds="d"):
+    return {"image_id": image_id, "dataset_id": ds, "status": status, "class_id": class_id,
+            "source_label": source_label, "reason": reason, "phash": phash, "sha256": image_id,
+            "width": 100, "height": 100, "member_path": image_id, "split_source": "",
+            "duplicate_of": "", "dup_group": ""}
+
+
+def test_use_and_hold_copies_with_different_labels_conflict():
+    # same photo: one copy mapped to a class, the other held under a different source label
+    rows = [dup_row("a", "use", "X_RUST", "leaf_blight"), dup_row("b", "hold", "", "septoria")]
+    bm.resolve_duplicates(rows, 4, {"d": 0})
+    assert [r["reason"] for r in rows] == ["duplicate_label_conflict"] * 2
+
+
+def test_same_class_from_two_sources_is_not_a_conflict():
+    rows = [dup_row("a", "use", "X_RUST", "s", ds="d1"), dup_row("b", "use", "X_RUST", "yellow_rust", ds="d2")]
+    bm.resolve_duplicates(rows, 4, {"d1": 0, "d2": 1})
+    assert rows[0]["status"] == "use" and rows[1]["reason"] == "near_duplicate"
+
+
+def test_expert_label_wins_over_conflicting_copy():
+    rows = [dup_row("a", "use", "X_RUST", "leaf_blight"),
+            dup_row("b", "use", "X_OTHER", "septoria", reason="review:expert_label")]
+    bm.resolve_duplicates(rows, 4, {"d": 0})
+    assert rows[1]["status"] == "use" and rows[1]["class_id"] == "X_OTHER"
+    assert rows[0]["reason"] == "near_duplicate" and rows[0]["duplicate_of"] == "b"
+
+
+def test_experts_disagreeing_on_copies_excludes_all():
+    rows = [dup_row("a", "use", "X_RUST", reason="review:x"), dup_row("b", "use", "X_OTHER", reason="review:y")]
+    bm.resolve_duplicates(rows, 4, {"d": 0})
+    assert all(r["reason"] == "duplicate_label_conflict" for r in rows)
+
+
+def test_use_override_on_unhashed_image_is_rejected(tmp_path):
+    rows = [dict(dup_row("a", "exclude", reason="augmented_copy"), phash="")]
+    csv_path = tmp_path / "o.csv"
+    csv_path.write_text("image_id,action,class_id,reason\na,use,X_RUST,x\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="never hashed"):
+        bm.apply_overrides(rows, csv_path, {"X_RUST"})
+
+
+def test_legacy_cache_is_migrated_and_versioned(tmp_path, monkeypatch):
+    cache = tmp_path / "hash_cache.csv"
+    cache.write_text("key,sha256,phash,width,height,mode,is_grayscale,sharpness_256,brightness,error\n"
+                     "k1,s,p,1,1,RGB,0,1,1,\n", encoding="utf-8")
+    assert set(bm.load_cache(cache)) == {"k1"}                  # old rows count as version 1
+    assert "hash_version" in cache.read_text(encoding="utf-8").splitlines()[0]
+    monkeypatch.setattr(bm, "HASH_VERSION", "2")
+    assert bm.load_cache(cache) == {}                            # new hashing code ignores them
+
+
+def test_quality_rules():
+    spec = bm.DatasetSpec("d", "x", {}, {}, [], [], min_short_side=100, min_sharpness=5.0)
+    rows = [
+        {"dataset_id": "d", "status": "use", "width": 80, "height": 300, "sharpness_256": 50, "reason": ""},
+        {"dataset_id": "d", "status": "hold", "width": 300, "height": 300, "sharpness_256": 2, "reason": ""},
+        {"dataset_id": "d", "status": "use", "width": 300, "height": 300, "sharpness_256": 50, "reason": ""},
+        {"dataset_id": "d", "status": "exclude", "width": 10, "height": 10, "sharpness_256": 0, "reason": "x"},
+    ]
+    bm.apply_quality_rules(rows, {"d": spec})
+    assert [r["reason"] for r in rows] == ["too_small", "too_blurry", "", "x"]
+
+
+def test_overrides_reject_invalid_class(fake_world, monkeypatch, tmp_path):
+    monkeypatch.setattr(bm, "REPO_SUMMARY_DIR", tmp_path / "repo_summary")
+    bad = tmp_path / "bad.csv"
+    bad.write_text("image_id,action,class_id,reason\nabc,use,NOT_A_CLASS,x\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="NOT_A_CLASS"):
+        run(fake_world, overrides=bad)
 
 
 def test_end_to_end(fake_world, monkeypatch, tmp_path):

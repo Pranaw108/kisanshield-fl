@@ -4,11 +4,11 @@
 - [ ] S-00 Project setup, partners and ethics
 
 ## Stage B · Data
-- [ ] S-01 Data assessment
+- [x] S-01 Data assessment (registry, manifest, EDA)
 - [ ] S-02 Disease scope and label taxonomy
 - [ ] S-03 Public dataset acquisition and mapping
 - [ ] S-04 Field data collection and farmer survey (kharif + rabi)
-- [ ] S-05 Annotation and quality control
+- [ ] S-05 Annotation and quality control (automatic cleaning done; expert audit pending)
 - [ ] S-06 Preprocessing, augmentation and splits
 
 ## Stage C · Model

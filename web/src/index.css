@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-drift {
+    animation: drift 20s ease-in-out infinite alternate;
+  }
+}
+@keyframes drift {
+  to {
+    transform: translate(24px, 18px) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-rise {
+    animation: rise 0.28s ease both;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

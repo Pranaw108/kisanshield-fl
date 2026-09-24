@@ -22,6 +22,13 @@
 schema_version: 2
 last_reviewed: 2026-09-18
 
+# Expert review sampling (data/scripts/review_pack.py)
+review:
+  audit_per_group: 50
+  audit_overrides:                 # D-15: larger samples where EDA found conflicting labels
+    - {dataset_id: kaggle_wheat_plant_diseases, source_label: black_rust, sample_size: 100}
+    - {dataset_id: kaggle_wheat_plant_diseases, source_label: brown_rust, sample_size: 100}
+
 datasets:
 
   # ======================================================================

@@ -27,8 +27,9 @@ build scripts. Evidence references point to [`docs/eda/EDA_FINDINGS.md`](../../d
 | D-11 | Ignore the Kaggle wheat set's own train/valid/test split | F5: 333 duplicate groups cross its splits | split step | ENG | Applied |
 | D-12 | Preprocessing: **tile YELLOW-RUST-19 strips into near-square crops**; letterbox (pad) other images; use background-robust augmentation (random crops, colour jitter) | F2, F3: shape and background shortcuts | split / preprocessing | ENG | Planned |
 | D-13 | Evaluation: report **per-source** accuracy and leave-one-source-out results where a class has 2+ sources. Never present public-data accuracy as field accuracy | F1: sources are fully separable | evaluation | ENG, PI | Planned |
-| D-14 | Balance: cap the YELLOW-RUST-19 yellow-rust contribution (~1,500 images) and use class-weighted loss | F4: 20.6× imbalance in wheat | split step | ENG | Planned |
-| D-15 | Audit Kaggle black and brown rust with **100** images each (others 50) | F6: black and brown rust labels conflict | review pack | ENG | Applied |
+| D-14 | Balance: cap the YELLOW-RUST-19 yellow-rust contribution (~1,500 images) and use class-weighted loss | F4: 20.8× imbalance in wheat | split step | ENG | Planned |
+| D-15 | Audit Kaggle black and brown rust with **100** images each (others 50) | F6: black and brown rust labels conflict | datasets.yaml `review:` | ENG | Applied |
+| D-18 | An expert "unsure" verdict **holds** an image instead of excluding it; "wrong" without a class excludes it only when the expert says `wrong_unknown` | Not being able to judge a photo is different from rejecting it; a forgotten class must not silently delete data | review_pack.py | ENG | Applied |
 | D-16 | During the label audit, check Kaggle mildew images with dark backgrounds | F3 | review pack | AGR | Pending |
 | D-17 | Severity maps (YELLOW-RUST-19 Cobb scale, FUSARIUM-22 wilt %) → app severity 0–4 | Needed for advice by severity | datasets.yaml `severity_map` | AGR | Provisional |
 

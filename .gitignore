@@ -49,16 +49,22 @@ venv/
 dist/
 build/
 
-# ---- Android ----
-android/.gradle/
-android/build/
-android/app/build/
-android/local.properties
-android/captures/
-android/.externalNativeBuild/
-android/.cxx/
+# ---- Flutter / Dart ----
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/ios/Pods/
 *.apk
 *.aab
+
+# ---- Web ----
+web/node_modules/
+web/dist/
+web/.env.local
+web/*.tsbuildinfo
 
 # ---- IDE / OS ----
 .idea/

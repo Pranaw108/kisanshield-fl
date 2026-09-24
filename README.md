@@ -78,7 +78,8 @@ If you use this work, please also cite the original datasets:
 | ML | TensorFlow / Keras, MobileNetV3 / EfficientNet-Lite, LiteRT (TFLite) |
 | Federated learning | [Flower](https://flower.ai) (simulation + Android clients), SecAgg+, differential privacy |
 | Backend | FastAPI, PostgreSQL, Docker Compose |
-| Mobile | Kotlin, Jetpack Compose, CameraX, LiteRT, Room, WorkManager |
+| Mobile | Flutter (Dart), `camera`, `tflite_flutter`, Riverpod |
+| Web | React + TypeScript + Vite + Tailwind CSS, calling the same backend API as mobile |
 | Data & experiments | Label Studio, FiftyOne, cleanlab, MLflow |
 
 ## Repository structure
@@ -89,14 +90,17 @@ kisanshield-fl/
 ├── data/         # Data scripts and manifests (images are never committed)
 ├── ml/           # Preprocessing, training, calibration, mobile export
 ├── fl/           # Federated learning simulation, server app, privacy attack tests
-├── backend/      # FastAPI service: devices, model registry, advice packs, admin
+├── backend/      # FastAPI service: prediction API, model registry, advice packs, admin
 ├── advisory/     # Expert-approved advice records and pack builder
-├── android/      # Kotlin Android app
+├── mobile/       # Flutter app (Android first)
+├── web/          # Browser demo of the prediction model
 ├── deploy/       # Docker Compose and environment templates
 └── docs/         # Roadmap, architecture, threat model, runbooks
 ```
 
-Each folder has its own README explaining what goes in it.
+Each folder has its own README explaining what goes in it. Engineering decisions are logged in
+[docs/BUILD_LOG.md](docs/BUILD_LOG.md); data-labelling decisions in
+[data/review/DECISIONS.md](data/review/DECISIONS.md).
 
 ## Data and privacy principles
 
@@ -105,21 +109,28 @@ Each folder has its own README explaining what goes in it.
 3. No faces, names, phone numbers or exact GPS locations are stored.
 4. Public datasets are used only in line with their licences, and their sources are cited in `data/manifests/`.
 
-## Data status
+## Project status
 
 | Step | Status | Where |
 |---|---|---|
 | Dataset registry and manifest (duplicates, quality) | Done | [data/README.md](data/README.md) |
 | Exploratory data analysis | Done | [docs/eda/EDA_FINDINGS.md](docs/eda/EDA_FINDINGS.md) |
-| Cleaning decisions | Automatic rules applied; 7 decisions awaiting expert sign-off | [data/review/DECISIONS.md](data/review/DECISIONS.md) |
+| Cleaning decisions | Automatic rules applied; several awaiting expert sign-off | [data/review/DECISIONS.md](data/review/DECISIONS.md) |
 | Expert label audit and SoyNet relabelling | Review pack ready | [data/review/README.md](data/review/README.md) |
+| Train/val/test split | Done (public data only) | `data/scripts/build_splits.py` |
+| Baseline model | First pass trained and evaluated, real numbers | [ml/training/RESULTS.md](ml/training/RESULTS.md) |
+| Prediction API | v0 working, tested (fake + real model) | [backend/README.md](backend/README.md) |
+| Web demo | v0 working, tested, built | [web/README.md](web/README.md) |
+| Mobile app | v0 skeleton, calls the API; on-device inference not started | [mobile/README.md](mobile/README.md) |
 
 **Key EDA finding:** in the public data, class is strongly tied to the source dataset (image shape, background,
-camera). Accuracy on public data will overstate real-field accuracy. Madhya Pradesh field photos are needed for a trustworthy test set.
+camera). Accuracy on public data will overstate real-field accuracy. Madhya Pradesh field photos are needed for a
+trustworthy test set — confirmed on real predictions, not just in theory: see the per-source table in
+[ml/training/RESULTS.md](ml/training/RESULTS.md).
 
 ## Getting started
 
-Requirements: Python 3.11+ (tested on 3.13). Later components will also need Android Studio (JDK 17) and Docker.
+Requirements: Python 3.11+ (tested on 3.13), Node 20+, Flutter (stable channel). Docker comes later, for `deploy/`.
 
 ```bash
 python -m venv .venv

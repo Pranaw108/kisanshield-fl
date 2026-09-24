@@ -15,4 +15,5 @@ Use [Conventional Commits](https://www.conventionalcommits.org): `feat(ml): add 
 
 ## Code style
 - Python: `ruff` + `black`, type hints on public functions, `pytest` for tests.
-- Kotlin: official Kotlin style, `ktlint`.
+- Dart/Flutter: official Dart style, `dart format` + `flutter analyze`.
+- Web: plain HTML/CSS/JS, no build step, until the page needs one.

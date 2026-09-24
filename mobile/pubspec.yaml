@@ -1,0 +1,22 @@
+name: kisanshield_mobile
+description: "KisanShield-FL — crop disease prediction for Madhya Pradesh farmers."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  http: ^1.2.2               # v0: calls the backend /predict API (see lib/services/api_service.dart)
+  image_picker: ^1.1.2       # camera + gallery, one API for both
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
